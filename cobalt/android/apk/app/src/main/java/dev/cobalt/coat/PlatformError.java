@@ -33,6 +33,7 @@ import dev.cobalt.shell.StartupGuard;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import org.chromium.content_public.browser.WebContents;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Shows an ErrorDialog to inform the user of a Starboard platform error. */
 public class PlatformError
@@ -59,22 +60,24 @@ public class PlatformError
   private static final int DISMISS_BUTTON = 3;
 
   private static final String RETRY_PARAM_KEY = "netdialog_retry";
-  private static final String RETRY_PARAM_VALUE = "1";
+  private static final AtomicInteger sRetryCount = new AtomicInteger(0);
 
   private final Holder<Activity> mActivityHolder;
   private final @ErrorType int mErrorType;
   private final long mData;
   private final Handler mUiThreadHandler;
+  private final String mFailedUrl;
 
   private Dialog mDialog;
   private int mResponse;
 
-  public PlatformError(Holder<Activity> activityHolder, @ErrorType int errorType, long data) {
+  public PlatformError(Holder<Activity> activityHolder, @ErrorType int errorType, long data, String failedUrl) {
     mActivityHolder = activityHolder;
     mErrorType = errorType;
     mData = data;
     mUiThreadHandler = new Handler(Looper.getMainLooper());
     mResponse = CANCELLED;
+    mFailedUrl = failedUrl;
   }
 
   /** Display the error. */
@@ -112,7 +115,15 @@ public class PlatformError
         return;
     }
     StartupGuard.getInstance().disarm();
+
     mDialog = dialogBuilder.setButtonClickListener(this).setOnDismissListener(this).create();
+
+/*
+    Log.w(TAG, "DEBUG (A): Auto-clicking RETRY_BUTTON to simulate request spike...");
+    onClick(mDialog, RETRY_BUTTON);
+
+    return; // Prevent the actual visual dialog from showing and blocking
+*/
 
     // When the user presses the back button, suspend the app without dismissing the dialog
     mDialog.setOnKeyListener(
@@ -176,10 +187,23 @@ public class PlatformError
               // Reloading the web contents as a fallback if the URL is empty to attempt a fresh navigation.
               // Otherwise, add a param to the URL to indicate a bootstrap request with a retry from the network dialog
               if (currentUrl.isEmpty()) {
-                Log.i(TAG, "Visible URL is empty; cannot append retry parameter. Reloading the WebContents");
-                webContents.getNavigationController().reload(/*param=*/true);
+                currentUrl = mFailedUrl;
+                Log.i(TAG, "DEBUG: Visible URL is empty; using failed URL: " + currentUrl);
               } else {
-                cobaltActivity.getActiveShell().loadUrl(addRetryUrlParam(currentUrl));
+                if (currentUrl.equals(mFailedUrl)) {
+                  Log.i(TAG, "DEBUG: Current URL equals failed URL");
+                } else {
+                  Log.i(TAG, "DEBUG: Current URL is different from failed URL");
+                  Log.i(TAG, "DEBUG: Current URL: " + currentUrl);
+                  Log.i(TAG, "DEBUG: mFailedUrl: " + mFailedUrl);
+                }
+              }
+              if (currentUrl != null && !currentUrl.isEmpty()) {
+                Log.i(TAG, "DEBUG: loading url: " + mFailedUrl);
+                cobaltActivity.getActiveShell().loadUrl(addRetryUrlParam(mFailedUrl));
+              } else {
+                Log.i(TAG, "DEBUG: !!!Both visible URL and startup URL are empty. Reloading the WebContents");
+                webContents.getNavigationController().reload(/*param=*/true);
               }
             }
           }
@@ -211,13 +235,22 @@ public class PlatformError
    *  bootstrap requests that originate from a network dialog retry.
    */
   private String addRetryUrlParam(String url) {
-    Uri parsedUri = Uri.parse(url);
-    if (parsedUri.getQueryParameter(RETRY_PARAM_KEY) == null) {
-      Uri.Builder uriBuilder = parsedUri.buildUpon();
-      uriBuilder.appendQueryParameter(RETRY_PARAM_KEY, RETRY_PARAM_VALUE);
-      return uriBuilder.build().toString();
+    int count = sRetryCount.incrementAndGet();
+    Log.i(TAG, "DEBUG: retry count == " + count);
+
+    String paramPrefix = RETRY_PARAM_KEY + "=";
+    int hashIndex = url.indexOf("#");
+    String baseUrl = hashIndex >= 0 ? url.substring(0, hashIndex) : url;
+    String fragment = hashIndex >= 0 ? url.substring(hashIndex) : "";
+
+    if (baseUrl.contains(paramPrefix)) {
+      baseUrl = baseUrl.replaceAll(RETRY_PARAM_KEY + "=\\d+", RETRY_PARAM_KEY + "=" + count);
+    } else {
+      String separator = baseUrl.contains("?") ? "&" : "?";
+      baseUrl = baseUrl + separator + RETRY_PARAM_KEY + "=" + count;
     }
-    return url;
+
+    return baseUrl + fragment;
   }
 
 }

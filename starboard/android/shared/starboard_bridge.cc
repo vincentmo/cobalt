@@ -207,7 +207,6 @@ int64_t StarboardBridge::GetAppStartTimestamp(JNIEnv* env) {
   return Java_StarboardBridge_getAppStartTimestamp(env, j_starboard_bridge_);
 }
 
-
 void StarboardBridge::ApplicationStarted(JNIEnv* env) {
   SB_DCHECK(env);
   Java_StarboardBridge_applicationStarted(env, j_starboard_bridge_);
@@ -234,10 +233,13 @@ ScopedJavaLocalRef<jintArray> StarboardBridge::GetSupportedHdrTypes(
 
 void StarboardBridge::RaisePlatformError(JNIEnv* env,
                                          jint errorType,
-                                         jlong data) {
+                                         jlong data,
+                                         const std::string& url) {
   SB_DCHECK(env);
+  ScopedJavaLocalRef<jstring> j_url =
+      base::android::ConvertUTF8ToJavaString(env, url);
   Java_StarboardBridge_raisePlatformError(env, j_starboard_bridge_, errorType,
-                                          data);
+                                          data, j_url);
 }
 
 bool StarboardBridge::IsPlatformErrorShowing(JNIEnv* env) {

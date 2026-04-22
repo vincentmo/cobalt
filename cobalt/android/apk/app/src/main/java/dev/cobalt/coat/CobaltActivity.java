@@ -377,6 +377,13 @@ public abstract class CobaltActivity extends Activity {
   }
 
   /**
+   * @return The startup URL or null if not set.
+   */
+  public String getStartupUrl() {
+    return mStartupUrl;
+  }
+
+  /**
    * @return The {@link ShellManager} configured for the activity or null if it has not been created
    *     yet.
    */

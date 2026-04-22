@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "url/gurl.h"
 
 #include "components/js_injection/browser/js_communication_host.h"
 
@@ -44,7 +45,21 @@ class CobaltWebContentsObserver : public content::WebContentsObserver {
       content::NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
-  virtual void RaisePlatformError();
+  void DidRedirectNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void ReadyToCommitNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidActivatePortal(content::WebContents* predecessor_web_contents,
+                         base::TimeTicks activation_time) override;
+  void DidStartLoading() override;
+  void DidStopLoading() override;
+  void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override;
+  void DidFinishLoad(content::RenderFrameHost* render_frame_host,
+                     const GURL& validated_url) override;
+  void DidFailLoad(content::RenderFrameHost* render_frame_host,
+                   const GURL& validated_url,
+                   int error_code) override;
+  virtual void RaisePlatformError(const GURL& url);
 
  protected:
   void SetTimerForTestInternal(std::unique_ptr<base::OneShotTimer> timer);
